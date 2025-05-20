@@ -185,8 +185,22 @@
         window.tooltipZones = [];
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        const dateStart = document.getElementById("dateStart").value;
-        const dateEnd = document.getElementById("dateEnd").value;
+				let dateStart = document.getElementById("dateStart").value;
+				let dateEnd = document.getElementById("dateEnd").value;
+
+				// Standard: letzte 14 Tage
+				if (!dateStart || !dateEnd) {
+				  const now = new Date();
+				  const past = new Date();
+				  past.setDate(now.getDate() - 13); // inkl. heute ergibt das 14 Tage
+				  dateStart = past.toISOString().slice(0, 10);
+				  dateEnd = now.toISOString().slice(0, 10);
+
+				  // Optional: Eingabefelder automatisch setzen
+				  document.getElementById("dateStart").value = dateStart;
+				  document.getElementById("dateEnd").value = dateEnd;
+				}
+        
 
         const blurFactor = parseFloat(document.getElementById("blurFactor").value);
         document.getElementById("infoBox").textContent = `Weichzeichnung: ${blurFactor}x`;
