@@ -299,7 +299,7 @@
 			});
 			
 		// Automatisch JSON-Datei laden beim Seitenstart
-		fetch("https://drive.google.com/file/d/1HeRY5HxWz4Gki0DRucluS8fRol3WWEY2/view?usp=sharing")
+		fetch("heatmap.json")
 		  .then(response => {
 		    if (!response.ok) throw new Error("Datei konnte nicht geladen werden.");
 		    return response.json();
@@ -311,6 +311,22 @@
 		  .catch(err => {
 		    console.error("Fehler beim automatischen Laden der JSON-Datei:", err.message);
 		  });
+			
+			// === Google Drive JSON automatisch laden ===
+			const gdriveJSONUrl = "https://drive.google.com/uc?export=download&id=1HeRY5HxWz4Gki0DRucluS8fRol3WWEY2";
+
+			fetch(gdriveJSONUrl)
+			  .then(response => {
+			    if (!response.ok) throw new Error("Datei konnte nicht geladen werden.");
+			    return response.json();
+			  })
+			  .then(data => {
+			    window.lastHeatmapData = data;
+			    drawHeatmap(data);
+			  })
+			  .catch(err => {
+			    console.error("Fehler beim automatischen Laden der JSON-Datei:", err.message);
+			  });
 			
 			
     });
