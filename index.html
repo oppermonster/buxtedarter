@@ -270,6 +270,20 @@
 			  link.click();
 			});
 			
+		// Automatisch JSON-Datei laden beim Seitenstart
+		fetch("heatmap.json")
+		  .then(response => {
+		    if (!response.ok) throw new Error("Datei konnte nicht geladen werden.");
+		    return response.json();
+		  })
+		  .then(data => {
+		    window.lastHeatmapData = data;
+		    drawHeatmap(data);
+		  })
+		  .catch(err => {
+		    console.error("Fehler beim automatischen Laden der JSON-Datei:", err.message);
+		  });
+			
 			
     });
   </script>
