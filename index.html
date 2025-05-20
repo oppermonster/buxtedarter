@@ -88,7 +88,7 @@
 	
 
   
-  <!--<div id="infoBox"></div>-->
+  <div id="infoBox"></div>
   <div id="tooltip"></div>
 
   <div id="sliderPanel" style="display:flex; flex-wrap:wrap; justify-content:center; gap:0.5rem; padding:1rem; background:#222; border-radius:8px; margin-top:1rem;">
@@ -213,8 +213,8 @@
 				}
         
 
-        // const blurFactor = parseFloat(document.getElementById("blurFactor").value);
-        // document.getElementById("infoBox").textContent = `Weichzeichnung: ${blurFactor}x`;
+        const blurFactor = parseFloat(document.getElementById("blurFactor").value);
+        document.getElementById("infoBox").textContent = `Weichzeichnung: ${blurFactor}x`;
 
         const gridStep = parseInt(document.getElementById("gridSlider").value);
         const clusterFactor = 2.0;
