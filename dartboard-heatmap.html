@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dartwurf Heatmap</title>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-family: sans-serif;
+      background: #fff;
+      color: #eee;
+    }
+    canvas {
+      background: url("dartboard.png") center/contain no-repeat;
+      background-color: rgba(255, 255, 255, 0.4);
+      background-size: 122%;
+			margin: 20px 0;
+    }
+    input, select, label {
+      margin: 0.5rem;
+    }
+    .legend {
+      display: flex;
+      width: 300px;
+      height: 20px;
+      background: linear-gradient(to right, blue, red);
+      margin-top: 1rem;
+    }
+    .legend-labels {
+      display: flex;
+      justify-content: space-between;
+      width: 300px;
+      font-size: 0.75rem;
+      color: #eee;
+    }
+    #tooltip {
+      position: absolute;
+      padding: 4px 8px;
+      background: #000;
+      color: #fff;
+      font-size: 0.75rem;
+      border-radius: 4px;
+      pointer-events: none;
+      visibility: hidden;
+      z-index: 1000;
+      white-space: pre-line;
+    }
+    #infoBox {
+      position: absolute;
+      top: 8px;
+      right: 12px;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 6px 10px;
+      font-size: 12px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Trefferverteilung – Dartboard Heatmap</h1>
+
+  <div id="filterPanel" style="display:flex; flex-wrap:wrap; justify-content:center; gap:0.5rem; padding:1rem; background:#222; border-radius:8px; margin-bottom:1rem;">
+    <label for="upload">JSON-Datei wählen:</label>
+    <input type="file" accept=".json" id="upload">
+    <label for="dateStart">Datum von:</label>
+    <input type="date" id="dateStart">
+    <label for="dateEnd">bis:</label>
+    <input type="date" id="dateEnd">
+    <button id="applyDate">Anwenden</button>
+  </div>
+	<button id="downloadBtn">Heatmap als PNG herunterladen</button>
+	<canvas id="board" width="600" height="600"></canvas>
+
+	
+
+  
+  <div id="infoBox"></div>
+  <div id="tooltip"></div>
+
+  <div id="sliderPanel" style="display:flex; flex-wrap:wrap; justify-content:center; gap:0.5rem; padding:1rem; background:#222; border-radius:8px; margin-top:1rem;">
+    <label for="blurFactor">Weichzeichnung: <span id="blurFactorVal">1.5</span>x</label>
+    <input type="range" id="blurFactor" min="0.5" max="4" step="0.1" value="0.5">
+
+    <label for="gridSlider">Rastergröße: <span id="gridSliderVal">10</span> px</label>
+    <input type="range" id="gridSlider" min="1" max="30" value="1" step="1">
+
+    <label for="minRadius">Min. Punktgröße: <span id="minRadiusVal">2</span> px</label>
+    <input type="range" id="minRadius" min="1" max="10" value="1">
+
+    <label for="maxRadius">Max. Punktgröße: <span id="maxRadiusVal">10</span> px</label>
+    <input type="range" id="maxRadius" min="1" max="30" value="5">
+
+    <label for="threshold">Mind. Treffer pro Punkt: <span id="thresholdVal">1</span></label>
+    <input type="range" id="threshold" min="1" max="10" value="1">
+  </div>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", () => {
+      const canvas = document.getElementById("board");
+      if (!canvas) {
+        console.error("Canvas mit ID 'board' wurde nicht gefunden.");
+        return;
+      }
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        console.error("Canvas-Kontext konnte nicht initialisiert werden.");
+        return;
+      }
+			
+
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      const radius = canvas.width / 2;
+
+      const tooltip = document.getElementById("tooltip");
+
+      canvas.addEventListener("mousemove", (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        const zone = (window.tooltipZones || []).find(z => Math.hypot(mx - z.x, my - z.y) <= z.r);
+        if (zone) {
+          tooltip.textContent = `Treffer: ${zone.count}\nSegment: ${zone.segment}`;
+          tooltip.style.left = `${e.pageX + 10}px`;
+          tooltip.style.top = `${e.pageY + 10}px`;
+          tooltip.style.visibility = "visible";
+        } else {
+          tooltip.style.visibility = "hidden";
+        }
+      });
+
+      canvas.addEventListener("mouseleave", () => {
+        tooltip.style.visibility = "hidden";
+      });
+
+      document.getElementById("applyDate")?.addEventListener("click", () => {
+        if (window.lastHeatmapData) drawHeatmap(window.lastHeatmapData);
+      });
+
+      ["blurFactor", "gridSlider", "minRadius", "maxRadius", "threshold"].forEach(id => {
+        const input = document.getElementById(id);
+        const label = document.getElementById(id + 'Val');
+        if (input && label) label.textContent = input.value;
+        input.addEventListener("input", () => {
+          if (label) label.textContent = input.value;
+          if (window.lastHeatmapData) drawHeatmap(window.lastHeatmapData);
+        });
+      });
+
+      document.getElementById("upload")?.addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function (event) {
+          try {
+            const data = JSON.parse(event.target.result);
+            window.lastHeatmapData = data;
+            drawHeatmap(data);
+          } catch (err) {
+            alert("Fehler beim Parsen der JSON-Datei: " + err.message);
+          }
+        };
+        reader.readAsText(file);
+      });
+			function interpolateColor(stops, t) {
+			  for (let i = 0; i < stops.length - 1; i++) {
+			    const [pos1, color1] = stops[i];
+			    const [pos2, color2] = stops[i + 1];
+			    if (t >= pos1 && t <= pos2) {
+			      const localT = (t - pos1) / (pos2 - pos1);
+			      const r = Math.round(color1[0] + (color2[0] - color1[0]) * localT);
+			      const g = Math.round(color1[1] + (color2[1] - color1[1]) * localT);
+			      const b = Math.round(color1[2] + (color2[2] - color1[2]) * localT);
+			      return [r, g, b];
+			    }
+			  }
+			  return stops[stops.length - 1][1];
+			}
+			
+
+      function drawHeatmap(data) {
+        window.tooltipZones = [];
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const dateStart = document.getElementById("dateStart").value;
+        const dateEnd = document.getElementById("dateEnd").value;
+
+        const blurFactor = parseFloat(document.getElementById("blurFactor").value);
+        document.getElementById("infoBox").textContent = `Weichzeichnung: ${blurFactor}x`;
+
+        const gridStep = parseInt(document.getElementById("gridSlider").value);
+        const clusterFactor = 2.0;
+        const step = gridStep * clusterFactor;
+        const threshold = parseInt(document.getElementById("threshold").value);
+        const blurRadius = step * blurFactor;
+
+        let heatmapGrid = {};
+        let maxCount = 0;
+
+        data.forEach((d) => {
+          if (dateStart && d.datum < dateStart) return;
+          if (dateEnd && d.datum > dateEnd) return;
+          const xVal = typeof d.x === 'string' ? parseFloat(d.x) : d.x;
+          const yVal = typeof d.y === 'string' ? parseFloat(d.y) : d.y;
+          if (typeof xVal !== 'number' || typeof yVal !== 'number' || isNaN(xVal) || isNaN(yVal)) return;
+          const rawX = centerX + xVal * radius;
+          const rawY = centerY - yVal * radius;
+          const x = Math.round(rawX / step) * step;
+          const y = Math.round(rawY / step) * step;
+          const key = `${x},${y}`;
+          const seg = d.segment || "Unbekannt";
+
+          if (!heatmapGrid[key]) {
+            heatmapGrid[key] = { count: 0, segments: {} };
+          }
+          heatmapGrid[key].count += 1;
+          heatmapGrid[key].segments[seg] = (heatmapGrid[key].segments[seg] || 0) + 1;
+          if (heatmapGrid[key].count > maxCount) maxCount = heatmapGrid[key].count;
+        });
+
+        if (maxCount === 0) {
+          document.getElementById("infoBox").textContent = "Keine gültigen Treffer im aktuellen Filterbereich oder Daten ungültig.";
+          return;
+        }
+
+        Object.entries(heatmapGrid).forEach(([key, obj]) => {
+          const count = obj.count;
+          if (count < threshold) return;
+          const [xStr, yStr] = key.split(',');
+          const x = Number(xStr);
+          const y = Number(yStr);
+
+          const segments = obj.segments;
+          const segmentName = Object.entries(segments).sort((a, b) => b[1] - a[1])[0]?.[0] || "Unbekannt";
+
+          const normalized = count / maxCount;
+          const intensity = Math.pow(normalized, 0.5);
+					const baseColor = interpolateColor([
+					  [0.0, [0, 0, 255]],    // Blau
+					  [0.33, [0, 255, 0]],   // Grün
+					  [0.66, [255, 255, 0]], // Gelb
+					  [1.0, [255, 0, 0]]     // Rot
+					], intensity);
+
+					const color = `rgba(${baseColor[0]}, ${baseColor[1]}, ${baseColor[2]}, ${0.4 + 0.6 * intensity})`;
+          
+          const minRadius = parseInt(document.getElementById("minRadius").value);
+          const maxRadius = parseInt(document.getElementById("maxRadius").value);
+          const drawRadius = minRadius + (maxRadius - minRadius) * intensity;
+
+          const gradient = ctx.createRadialGradient(x, y, 0, x, y, drawRadius + blurRadius);
+          gradient.addColorStop(0, color);
+          gradient.addColorStop(1, 'transparent');
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.arc(x, y, drawRadius + blurRadius, 0, 2 * Math.PI);
+          ctx.fill();
+
+          window.tooltipZones.push({ x, y, r: drawRadius + blurRadius, count, segment: segmentName });
+        });
+      }
+			document.getElementById("downloadBtn")?.addEventListener("click", () => {
+			  const canvas = document.getElementById("board");
+			  const link = document.createElement('a');
+			  link.href = canvas.toDataURL('image/png');
+			  link.download = `dartboard_heatmap_${new Date().toISOString().slice(0, 10)}.png`;
+			  link.click();
+			});
+			
+		// Automatisch JSON-Datei laden beim Seitenstart
+		fetch("heatmap.json")
+		  .then(response => {
+		    if (!response.ok) throw new Error("Datei konnte nicht geladen werden.");
+		    return response.json();
+		  })
+		  .then(data => {
+		    window.lastHeatmapData = data;
+		    drawHeatmap(data);
+		  })
+		  .catch(err => {
+		    console.error("Fehler beim automatischen Laden der JSON-Datei:", err.message);
+		  });
+			
+			
+    });
+  </script>
+</body>
+</html>
